@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Ultimate Custom Map</title>
+    <!-- Replace with your actual Google Maps API key -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBlJnCjZ_XxEECuNh_zuN-2HuEd9HD4COA&libraries=places"></script>
+    <!-- Material Symbols for icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 100%;
+        width: 100%;
+      }
+      /* Toolbar styling at top left */
+      #custom-controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        z-index: 999;
+      }
+      .btn {
+        width: 40px;
+        height: 40px;
+        background-color: #fff;
+        border: 1px solid #ccc;
+        border-radius: 2px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        position: relative;
+      }
+      .btn:hover {
+        background-color: #eee;
+      }
+      .btn.active {
+        background-color: #ddd;
+      }
+      .material-symbols-outlined {
+        font-size: 24px;
+        line-height: 24px;
+        color: #000;
+      }
+      #search-input {
+        width: 200px;
+        height: 40px;
+        padding: 0 10px;
+        border: 1px solid #ccc;
+        border-radius: 2px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        font-size: 14px;
+        outline: none;
+      }
+      #search-input:focus {
+        border-color: #aaa;
+      }
+      /* Dropdown styling for theme picker and saved locations */
+      .dropdown-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        display: none;
+        flex-direction: column;
+        background-color: #fff;
+        border: 1px solid #ccc;
+        border-radius: 2px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        z-index: 1000;
+        min-width: 140px;
+      }
+      .dropdown-menu.open {
+        display: flex;
+      }
+      .dropdown-item {
+        padding: 6px 10px;
+        cursor: pointer;
+        font-size: 14px;
+        white-space: nowrap;
+        border-bottom: 1px solid #ccc;
+        box-sizing: border-box;
+      }
+      .dropdown-item:hover {
+        background-color: #eee;
+      }
+      /* Virtual Keyboard styling */
+      #virtual-keyboard {
+        display: none;
+        position: absolute;
+        top: 60px;
+        left: 10px;
+        background-color: #fff;
+        border: 1px solid #ccc;
+        padding: 10px;
+        z-index: 999;
+      }
+      #virtual-keyboard .keyboard-row {
+        margin-bottom: 5px;
+      }
+      #virtual-keyboard button {
+        margin: 2px;
+        min-width: 30px;
+        min-height: 30px;
+        cursor: pointer;
+      }
+      /* Optional Drag feedback element */
+      #drag-feedback {
+        position: absolute;
+        pointer-events: none;
+        font-size: 32px;
+        z-index: 10000;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <!-- Toolbar with search and control buttons -->
+    <div id="custom-controls">
+      <input id="search-input" type="text" placeholder="Search" title="Search for a place" autocomplete="off">
+      <!-- Keyboard button placed immediately to the right of the search input -->
+      <div id="keyboard-btn" class="btn" title="Toggle On-Screen Keyboard">
+        <span class="material-symbols-outlined">keyboard</span>
+      </div>
+      <div id="zoom-in-btn" class="btn" title="Zoom In">
+        <span class="material-symbols-outlined">zoom_in</span>
+      </div>
+      <div id="zoom-out-btn" class="btn" title="Zoom Out">
+        <span class="material-symbols-outlined">zoom_out</span>
+      </div>
+      <div id="traffic-btn" class="btn" title="Toggle Traffic">
+        <span class="material-symbols-outlined">directions_car_filled</span>
+      </div>
+      <!-- Labels toggle button -->
+      <div id="labels-btn" class="btn" title="Toggle Labels">
+        <span class="material-symbols-outlined">title</span>
+      </div>
+      <!-- Theme picker button with dropdown -->
+      <div id="theme-btn" class="btn" title="Select Theme" style="position: relative;">
+        <span class="material-symbols-outlined">format_paint</span>
+        <div id="theme-dropdown" class="dropdown-menu">
+          <div class="dropdown-item" data-theme="satellite">Satellite</div>
+          <div class="dropdown-item" data-theme="map">Map</div>
+          <div class="dropdown-item" data-theme="pink">Pink</div>
+          <div class="dropdown-item" data-theme="retro">Retro</div>
+          <div class="dropdown-item" data-theme="dark">Dark</div>
+        </div>
+      </div>
+      <!-- Terrain toggle button with mountain icon -->
+      <div id="terrain-toggle-btn" class="btn" title="Toggle Terrain">
+        <span class="material-symbols-outlined">terrain</span>
+      </div>
+      <!-- Save location button (floppy disc icon) -->
+      <div id="save-location-btn" class="btn" title="Save current location">
+        <span class="material-symbols-outlined">save</span>
+      </div>
+      <!-- Saved locations button (folder icon) -->
+      <div id="saved-locations-btn" class="btn" style="position: relative;" title="Show saved locations">
+        <span class="material-symbols-outlined">folder</span>
+        <div id="saved-locations-dropdown" class="dropdown-menu"></div>
+      </div>
+      <!-- Pegman toggle button (stick man icon) -->
+      <div id="pegman-btn" class="btn" title="Enter Street View Mode">
+        <span class="material-symbols-outlined">accessibility</span>
+      </div>
+      <!-- Clear pins button (delete icon) -->
+      <div id="clear-pins-btn" class="btn" title="Clear all search pins">
+        <span class="material-symbols-outlined">delete</span>
+      </div>
+    </div>
+
+    <!-- On-screen keyboard container -->
+    <div id="virtual-keyboard">
+      <div class="keyboard-row">
+        <button onclick="appendChar('Q')">Q</button>
+        <button onclick="appendChar('W')">W</button>
+        <button onclick="appendChar('E')">E</button>
+        <button onclick="appendChar('R')">R</button>
+        <button onclick="appendChar('T')">T</button>
+        <button onclick="appendChar('Y')">Y</button>
+        <button onclick="appendChar('U')">U</button>
+        <button onclick="appendChar('I')">I</button>
+        <button onclick="appendChar('O')">O</button>
+        <button onclick="appendChar('P')">P</button>
+      </div>
+      <div class="keyboard-row">
+        <button onclick="appendChar('A')">A</button>
+        <button onclick="appendChar('S')">S</button>
+        <button onclick="appendChar('D')">D</button>
+        <button onclick="appendChar('F')">F</button>
+        <button onclick="appendChar('G')">G</button>
+        <button onclick="appendChar('H')">H</button>
+        <button onclick="appendChar('J')">J</button>
+        <button onclick="appendChar('K')">K</button>
+        <button onclick="appendChar('L')">L</button>
+      </div>
+      <div class="keyboard-row">
+        <button onclick="appendChar('Z')">Z</button>
+        <button onclick="appendChar('X')">X</button>
+        <button onclick="appendChar('C')">C</button>
+        <button onclick="appendChar('V')">V</button>
+        <button onclick="appendChar('B')">B</button>
+        <button onclick="appendChar('N')">N</button>
+        <button onclick="appendChar('M')">M</button>
+      </div>
+      <div style="margin-top: 5px;">
+        <button onclick="appendChar(' ')">Space</button>
+        <button onclick="deleteChar()">Del</button>
+        <button onclick="toggleKeyboard()">Close</button>
+      </div>
+    </div>
+
+    <!-- Optional drag feedback element (if needed) -->
+    <div id="drag-feedback"></div>
+
+    <script>
+      let map, geocoder, trafficLayer, coverageLayer, overlay;
+      let labelsOn = false;
+      let currentTheme = "satellite";
+      let markers = [];
+      let savedLocations = []; // Maximum 5 locations.
+      let terrainMode = false;
+      let streetViewMode = false; // Toggle mode for Street View
+
+      // Initialize a hidden overlay (needed for coordinate conversions)
+      function initOverlay() {
+        overlay = new google.maps.OverlayView();
+        overlay.onAdd = function() {};
+        overlay.draw = function() {};
+        overlay.setMap(map);
+      }
+
+      // ----- Base Styles -----
+      const hideLabelsOnly = [
+        { featureType: "all", elementType: "labels", stylers: [{ visibility: "off" }] }
+      ];
+      const hideLabelsRoadsTopo = [
+        { featureType: "all", elementType: "labels", stylers: [{ visibility: "off" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ visibility: "off" }] },
+        { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ visibility: "off" }] }
+      ];
+
+      // ----- Theme Definitions -----
+      const themes = {
+        satellite: { mapType: "satellite", normal: null },
+        map: { mapType: "roadmap", normal: null },
+        pink: {
+          mapType: "roadmap",
+          styles: [
+            {"stylers": [{"hue": "#dd0d0d"}]},
+            {"featureType": "road", "elementType": "labels", "stylers": [{"visibility": "off"}]},
+            {"featureType": "road", "elementType": "geometry", "stylers": [{"lightness": 100}, {"visibility": "simplified"}]}
+          ]
+        },
+        retro: {
+          mapType: "roadmap",
+          styles: [
+            {"stylers": [{"hue": "#a1c0b8"}, {"saturation": -30}]},
+            {"featureType": "landscape", "stylers": [{"color": "#e6e2d3"}]},
+            {"featureType": "road", "elementType": "geometry", "stylers": [{"color": "#d4c4a8"}]},
+            {"featureType": "water", "stylers": [{"color": "#a8c4d4"}]}
+          ]
+        },
+        dark: {
+          mapType: "roadmap",
+          styles: [
+            {"featureType":"all","elementType":"labels.text.fill","stylers":[{"color":"#ffffff"}]},
+            {"featureType":"all","elementType":"labels.text.stroke","stylers":[{"color":"#000000"},{"lightness":13}]},
+            {"featureType":"administrative","elementType":"geometry.fill","stylers":[{"color":"#000000"}]},
+            {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#144b53"},{"lightness":14},{"weight":1.4}]},
+            {"featureType":"landscape","stylers":[{"color":"#08304b"}]},
+            {"featureType":"poi","stylers":[{"color":"#0c4152"},{"lightness":5}]},
+            {"featureType":"road.highway","stylers":[{"color":"#000000"}]},
+            {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#0b434f"},{"lightness":25}]},
+            {"featureType":"road.arterial","stylers":[{"color":"#000000"}]},
+            {"featureType":"road.arterial","elementType":"geometry.stroke","stylers":[{"color":"#0b3d51"},{"lightness":16}]},
+            {"featureType":"road.local","stylers":[{"color":"#000000"}]},
+            {"featureType":"transit","stylers":[{"color":"#146474"}]},
+            {"featureType":"water","stylers":[{"color":"#021019"}]}
+          ]
+        }
+      };
+
+      // ----- Map Initialization -----
+      function initMap() {
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: { lat: 0, lng: -30 },
+          zoom: 3,
+          mapTypeId: "satellite",
+          disableDefaultUI: true
+        });
+        geocoder = new google.maps.Geocoder();
+        trafficLayer = new google.maps.TrafficLayer();
+        coverageLayer = new google.maps.StreetViewCoverageLayer();
+        initOverlay();
+        setupControls();
+      }
+
+      // ----- Setup Controls and Event Listeners -----
+      function setupControls() {
+        // Search and autocomplete.
+        const input = document.getElementById("search-input");
+        const autocomplete = new google.maps.places.Autocomplete(input);
+        autocomplete.bindTo("bounds", map);
+        autocomplete.addListener("place_changed", () => {
+          const place = autocomplete.getPlace();
+          if (!place.geometry || !place.geometry.location) return;
+          map.setCenter(place.geometry.location);
+          map.setZoom(15);
+          const marker = new google.maps.Marker({
+            map: map,
+            position: place.geometry.location,
+            icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+          });
+          markers.push(marker);
+        });
+
+        // Zoom buttons.
+        document.getElementById("zoom-in-btn").addEventListener("click", () => {
+          map.setZoom(map.getZoom() + 1);
+        });
+        document.getElementById("zoom-out-btn").addEventListener("click", () => {
+          map.setZoom(map.getZoom() - 1);
+        });
+
+        // Traffic toggle.
+        const trafficBtn = document.getElementById("traffic-btn");
+        trafficBtn.addEventListener("click", () => {
+          if (trafficLayer.getMap()) {
+            trafficLayer.setMap(null);
+            trafficBtn.classList.remove("active");
+          } else {
+            trafficLayer.setMap(map);
+            trafficBtn.classList.add("active");
+          }
+        });
+
+        // Labels toggle.
+        const labelsBtn = document.getElementById("labels-btn");
+        labelsBtn.addEventListener("click", () => {
+          labelsOn = !labelsOn;
+          labelsBtn.classList.toggle("active", labelsOn);
+          applyTheme(currentTheme);
+        });
+
+        // Theme picker dropdown.
+        const themeBtn = document.getElementById("theme-btn");
+        const themeDropdown = document.getElementById("theme-dropdown");
+        themeBtn.addEventListener("click", function(e) {
+          e.stopPropagation();
+          themeDropdown.style.display = (themeDropdown.style.display === "flex") ? "none" : "flex";
+        });
+        document.addEventListener("click", function() {
+          themeDropdown.style.display = "none";
+        });
+        document.querySelectorAll(".dropdown-item").forEach(function(item) {
+          item.addEventListener("click", function(e) {
+            const chosen = e.currentTarget.dataset.theme;
+            themeDropdown.style.display = "none";
+            applyTheme(chosen);
+          });
+        });
+
+        // Terrain toggle button.
+        const terrainBtn = document.getElementById("terrain-toggle-btn");
+        terrainBtn.addEventListener("click", function(e) {
+          terrainMode = !terrainMode;
+          terrainBtn.classList.toggle("active", terrainMode);
+          applyTheme(currentTheme);
+        });
+
+        // Save location button.
+        const saveBtn = document.getElementById("save-location-btn");
+        saveBtn.addEventListener("click", saveCurrentLocation);
+
+        // Saved locations dropdown.
+        const savedLocsBtn = document.getElementById("saved-locations-btn");
+        const savedLocsDropdown = document.getElementById("saved-locations-dropdown");
+        savedLocsBtn.addEventListener("click", function(e) {
+          e.stopPropagation();
+          savedLocsDropdown.style.display = (savedLocsDropdown.style.display === "flex") ? "none" : "flex";
+        });
+        document.addEventListener("click", function() {
+          savedLocsDropdown.style.display = "none";
+        });
+
+        // Clear pins button.
+        const clearPinsBtn = document.getElementById("clear-pins-btn");
+        clearPinsBtn.addEventListener("click", () => {
+          markers.forEach(m => m.setMap(null));
+          markers = [];
+        });
+
+        // Pegman toggle for Street View Mode.
+        const pegmanBtn = document.getElementById("pegman-btn");
+        pegmanBtn.addEventListener("click", () => {
+          streetViewMode = !streetViewMode;
+          pegmanBtn.classList.toggle("active", streetViewMode);
+          // Change the icon color to green when active, black when inactive.
+          pegmanBtn.querySelector("span.material-symbols-outlined").style.color = streetViewMode ? "green" : "black";
+          // Toggle the Street View Coverage Layer so the default blue overlay is visible.
+          if (streetViewMode) {
+            coverageLayer.setMap(map);
+          } else {
+            coverageLayer.setMap(null);
+          }
+        });
+
+        // Listen for clicks on the map for Street View activation when in toggle mode.
+        document.getElementById("map").addEventListener("click", (e) => {
+          if (!streetViewMode) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          const projection = overlay.getProjection();
+          if (!projection) return;
+          const latLng = projection.fromContainerPixelToLatLng({ x, y });
+          const svService = new google.maps.StreetViewService();
+          // Use a larger radius for a bigger drop buffer zone.
+          svService.getPanorama({ location: latLng, radius: 150 }, (data, status) => {
+            if (status === "OK") {
+              const streetView = map.getStreetView();
+              streetView.setPosition(latLng);
+              streetView.setVisible(true);
+              // Exit Street View mode after a successful drop.
+              streetViewMode = false;
+              pegmanBtn.classList.remove("active");
+              pegmanBtn.querySelector("span.material-symbols-outlined").style.color = "black";
+              coverageLayer.setMap(null);
+            } else {
+              console.log("No Street View available at this location.");
+            }
+          });
+        });
+
+        // Toggle on-screen keyboard button.
+        const keyboardBtn = document.getElementById("keyboard-btn");
+        keyboardBtn.addEventListener("click", toggleKeyboard);
+      }
+
+      // ----- Apply a Theme -----
+      function applyTheme(name) {
+        currentTheme = name;
+        let style = null;
+        let mapType = null;
+        if (name === "satellite") {
+          mapType = labelsOn ? "hybrid" : "satellite";
+          style = null;
+        } else if (name === "map") {
+          mapType = terrainMode ? "terrain" : "roadmap";
+          style = labelsOn ? null : hideLabelsOnly;
+        } else if (name === "pink") {
+          mapType = terrainMode ? "terrain" : "roadmap";
+          style = themes.pink.styles.slice();
+          if (!labelsOn) {
+            style = style.concat(hideLabelsRoadsTopo);
+          }
+        } else if (name === "retro") {
+          mapType = terrainMode ? "terrain" : "roadmap";
+          style = themes.retro.styles.slice();
+          if (!labelsOn) {
+            style = style.concat(hideLabelsRoadsTopo);
+          }
+        } else if (name === "dark") {
+          mapType = terrainMode ? "terrain" : "roadmap";
+          style = themes.dark.styles.slice();
+          if (!labelsOn) {
+            style = style.concat(hideLabelsRoadsTopo);
+          }
+        }
+        map.setMapTypeId(mapType);
+        map.setOptions({ styles: style });
+      }
+
+      // ----- Save/Load Locations -----
+      function saveCurrentLocation() {
+        if (savedLocations.length >= 5) {
+          savedLocations.shift();
+        }
+        const streetView = map.getStreetView();
+        if (streetView && streetView.getVisible()) {
+          const pos = streetView.getPosition();
+          savedLocations.push({
+            lat: pos.lat(),
+            lng: pos.lng(),
+            streetView: true
+          });
+        } else {
+          const center = map.getCenter();
+          savedLocations.push({
+            lat: center.lat(),
+            lng: center.lng(),
+            zoom: map.getZoom(),
+            streetView: false
+          });
+        }
+        refreshSavedLocationsDropdown();
+      }
+
+      function refreshSavedLocationsDropdown() {
+        const dropdown = document.getElementById("saved-locations-dropdown");
+        dropdown.innerHTML = "";
+        savedLocations.forEach((loc) => {
+          const item = document.createElement("div");
+          item.classList.add("dropdown-item");
+          const latStr = loc.lat.toFixed(4);
+          const lngStr = loc.lng.toFixed(4);
+          const prefix = loc.streetView ? "Street: " : "Map: ";
+          const zoomStr = loc.streetView ? "" : " (z:" + loc.zoom + ")";
+          item.textContent = prefix + latStr + ", " + lngStr + zoomStr;
+          item.addEventListener("click", () => {
+            if (loc.streetView) {
+              const streetView = map.getStreetView();
+              streetView.setPosition({ lat: loc.lat, lng: loc.lng });
+              streetView.setVisible(true);
+            } else {
+              map.setCenter({ lat: loc.lat, lng: loc.lng });
+              map.setZoom(loc.zoom);
+            }
+          });
+          dropdown.appendChild(item);
+        });
+      }
+
+      // ----- On-screen Keyboard Functions -----
+      function toggleKeyboard() {
+        const keyboard = document.getElementById("virtual-keyboard");
+        keyboard.style.display = (keyboard.style.display === "none" || !keyboard.style.display)
+          ? "block"
+          : "none";
+      }
+
+      function appendChar(ch) {
+        const input = document.getElementById("search-input");
+        input.value += ch;
+      }
+
+      function deleteChar() {
+        const input = document.getElementById("search-input");
+        input.value = input.value.slice(0, -1);
+      }
+
+      window.onload = initMap;
+    </script>
+  </body>
+</html>
